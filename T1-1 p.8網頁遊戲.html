@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自訂配對遊戲產生器 (自動切換組別版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        
+        body { font-family: 'Nunito', sans-serif; }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .animate-shake { animation: shake 0.3s ease-in-out 0s 2; }
+        
+        @keyframes bomb-enlarge {
+            0% { transform: scale(0.5) rotate(0deg); opacity: 0; }
+            20% { transform: scale(1.2) rotate(-15deg); opacity: 1; }
+            40% { transform: scale(1.5) rotate(15deg); opacity: 1; }
+            60% { transform: scale(2) rotate(-10deg); opacity: 1; filter: drop-shadow(0 0 30px rgba(239, 68, 68, 0.8)); }
+            80% { transform: scale(3) rotate(10deg); opacity: 0.8; filter: drop-shadow(0 0 60px rgba(245, 158, 11, 0.8)); }
+            100% { transform: scale(5) rotate(0deg); opacity: 0; filter: drop-shadow(0 0 100px rgba(253, 224, 71, 1)); }
+        }
+        .animate-bomb-large { animation: bomb-enlarge 1s ease-in-out forwards; }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 min-h-screen relative overflow-x-hidden text-gray-800">
+
+    <div id="setup-screen" class="max-w-5xl mx-auto py-12 px-4">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 drop-shadow-sm mb-4">
+                ✨ 自訂配對遊戲產生器
+            </h1>
+            <p class="text-gray-600 font-bold text-lg bg-white/60 inline-block px-6 py-2 rounded-full shadow-sm">
+                最多可設定 20 組！<span class="text-red-500 font-black">（系統只會抓取「有上傳圖片」且「有文字的資料」當作題目）</span>
+            </p>
+        </header>
+
+        <div class="glass-card p-6 rounded-3xl shadow-xl mb-10 flex items-center justify-center gap-4 border-b-4 border-yellow-400 max-w-2xl mx-auto transform transition hover:scale-[1.02]">
+            <label class="text-2xl font-bold text-gray-700 flex items-center gap-2">
+                🏆 參與遊戲的組數：
+            </label>
+            <input type="number" id="team-count" min="1" max="26" value="2" class="w-24 text-center text-2xl font-black text-blue-700 border-2 border-gray-300 rounded-xl p-2 focus:border-blue-500 focus:ring-4 focus:ring-blue-200 outline-none transition-all">
+        </div>
+
+        <div id="form-container" class="space-y-6">
+            </div>
+
+        <div class="mt-12 text-center sticky bottom-6 z-50">
+            <button id="start-btn" class="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-3xl font-black py-5 px-16 rounded-full shadow-[0_10px_20px_rgba(79,70,229,0.3)] transition-all hover:shadow-[0_15px_30px_rgba(79,70,229,0.5)] hover:-translate-y-1 active:translate-y-1 border-b-4 border-indigo-800">
+                🚀 儲存並開始遊戲！
+            </button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="hidden max-w-6xl mx-auto py-8 px-4">
+        
+        <div class="flex flex-col items-center mb-8">
+            <div class="w-full flex justify-between items-center mb-6">
+                <button id="back-btn" class="bg-white hover:bg-gray-100 text-gray-700 font-bold py-3 px-6 rounded-full shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center gap-2 border border-gray-200">
+                    ⬅️ 返回編輯
+                </button>
+                <h1 class="text-3xl md:text-4xl font-black text-blue-800 bg-white px-10 py-3 rounded-full shadow-lg border-b-4 border-blue-200">
+                    🎧 Listen & Match
+                </h1>
+                <div class="w-[120px]"></div>
+            </div>
+
+            <div class="glass-card p-6 rounded-3xl shadow-xl w-full border border-white/50 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 via-blue-500 to-purple-500"></div>
+                <p class="text-center text-base font-bold text-gray-500 mb-4">👇 點擊加分按鈕，黃色框框會自動標示最後加分的組別</p>
+                <div id="scoreboard" class="flex flex-wrap justify-center gap-6"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-16 items-start mt-6">
+            <div id="game-images" class="grid grid-cols-2 gap-8 justify-items-center relative"></div>
+            <div id="game-sentences" class="space-y-5 flex flex-col relative z-10"></div>
+        </div>
+
+        <div id="success-msg" class="hidden mt-16 text-center text-4xl font-black text-white bg-gradient-to-r from-green-400 to-emerald-500 py-6 px-12 rounded-full shadow-2xl mx-auto w-max animate-bounce border-4 border-white">
+            🎉 Excellent! All matched! 🎉
+        </div>
+    </div>
+
+    <div id="bomb-modal" class="fixed inset-0 flex items-center justify-center z-[200] pointer-events-none hidden bg-red-900/10 backdrop-blur-sm transition-all">
+        <div id="bomb-box" class="text-[120px] md:text-[180px] drop-shadow-2xl">
+            💣
+        </div>
+    </div>
+
+    <script>
+        const maxItems = 20;
+        let gameData = []; 
+        let teams = [];
+        let activeTeamIndex = 0;
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        function initEditor() {
+            const container = document.getElementById('form-container');
+            container.innerHTML = '';
+            
+            const savedDataStr = localStorage.getItem('matchGameSavedData');
+            const savedTeamCount = localStorage.getItem('matchGameTeamCount');
+            
+            if (savedTeamCount) document.getElementById('team-count').value = savedTeamCount;
+
+            let defaultData = [
+                { name: 'Latoya', sentence: 'Latoya is friendly.', image: '' },
+                { name: 'Leticia', sentence: 'Leticia is shy.', image: '' },
+                { name: 'Michelle', sentence: 'Michelle is pretty.', image: '' },
+                { name: 'Nicole', sentence: 'Nicole is fun.', image: '' },
+                { name: 'Sarah', sentence: 'Sarah is special.', image: '' }
+            ];
+            for(let i = 5; i < maxItems; i++) {
+                defaultData.push({ name: '', sentence: '', image: '' });
+            }
+
+            if (savedDataStr) {
+                try { 
+                    const parsedData = JSON.parse(savedDataStr); 
+                    for(let i=0; i < parsedData.length; i++) {
+                        defaultData[i] = parsedData[i];
+                    }
+                } catch (e) { console.error(e); }
+            }
+
+            for (let i = 0; i < maxItems; i++) {
+                const def = defaultData[i] || { name: '', sentence: '', image: '' };
+                const hasImage = def.image && def.image !== '';
+                
+                const html = `
+                    <div class="glass-card p-6 rounded-3xl shadow-lg hover:shadow-xl transition-shadow flex flex-col md:flex-row gap-6 items-center" data-index="${i}">
+                        <div class="w-10 h-10 bg-blue-100 text-blue-800 font-black rounded-full flex items-center justify-center absolute -top-3 -left-3 border-2 border-white shadow-sm">
+                            ${i + 1}
+                        </div>
+                        <div class="w-24 h-24 bg-white rounded-full border-4 border-blue-200 flex-shrink-0 flex items-center justify-center text-gray-400 text-sm relative shadow-inner overflow-hidden">
+                            <img id="preview-${i}" src="${hasImage ? def.image : ''}" class="w-full h-full object-cover ${hasImage ? '' : 'hidden'}">
+                            <span id="preview-text-${i}" class="font-bold ${hasImage ? 'hidden' : ''}">無圖片</span>
+                        </div>
+                        
+                        <div class="flex-1 space-y-4 w-full">
+                            <div class="flex gap-3">
+                                <input type="text" id="name-${i}" placeholder="英文名字" value="${def.name}" class="flex-1 border-2 border-gray-200 rounded-2xl p-3 focus:border-blue-500 outline-none font-bold text-lg bg-white/80">
+                                <button onclick="searchWeb('${i}')" class="bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 text-blue-700 px-4 py-3 rounded-2xl font-bold whitespace-nowrap">🔍 找圖</button>
+                            </div>
+                            <input type="text" id="sentence-${i}" placeholder="完整句子" value="${def.sentence}" class="w-full border-2 border-gray-200 rounded-2xl p-3 focus:border-blue-500 outline-none font-bold text-lg bg-white/80">
+                        </div>
+
+                        <div class="flex-1 space-y-4 w-full border-l-0 md:border-l-2 pl-0 md:pl-6 border-gray-200/50">
+                            <div>
+                                <label class="text-sm font-bold text-gray-600 block mb-1">選項 A: 網路圖片網址</label>
+                                <input type="url" id="url-${i}" class="w-full border-2 border-gray-200 rounded-xl p-2 outline-none text-sm bg-white/80" onchange="updatePreview(${i}, 'url')">
+                            </div>
+                            <div>
+                                <label class="text-sm font-bold text-gray-600 block mb-1">選項 B: 電腦上傳</label>
+                                <input type="file" id="file-${i}" accept="image/*" class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer" onchange="updatePreview(${i}, 'file')">
+                            </div>
+                        </div>
+                        <input type="hidden" id="saved-img-${i}" value="${hasImage ? def.image : ''}">
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        function searchWeb(index) {
+            const nameInput = document.getElementById(`name-${index}`).value.trim();
+            if (!nameInput) return alert('請先輸入名字！');
+            window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(nameInput + ' face portrait')}`, '_blank');
+        }
+
+        function updatePreview(index, type) {
+            const imgEl = document.getElementById(`preview-${index}`);
+            const textEl = document.getElementById(`preview-text-${index}`);
+            const hiddenEl = document.getElementById(`saved-img-${index}`);
+
+            if (type === 'file') {
+                const fileInput = document.getElementById(`file-${index}`);
+                if (fileInput.files && fileInput.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        hiddenEl.value = e.target.result;
+                        imgEl.src = e.target.result;
+                        imgEl.classList.remove('hidden');
+                        textEl.classList.add('hidden');
+                        document.getElementById(`url-${index}`).value = '';
+                    }
+                    reader.readAsDataURL(fileInput.files[0]);
+                }
+            } else if (type === 'url') {
+                const urlInput = document.getElementById(`url-${index}`).value;
+                if (urlInput) {
+                    hiddenEl.value = urlInput;
+                    imgEl.src = urlInput;
+                    imgEl.classList.remove('hidden');
+                    textEl.classList.add('hidden');
+                    document.getElementById(`file-${index}`).value = '';
+                }
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            gameData = [];
+            let allSavedData = []; 
+
+            for (let i = 0; i < maxItems; i++) {
+                const name = document.getElementById(`name-${i}`).value.trim();
+                const sentence = document.getElementById(`sentence-${i}`).value.trim();
+                let imageSrc = document.getElementById(`saved-img-${i}`).value;
+
+                allSavedData.push({ name, sentence, image: imageSrc });
+
+                if (name && sentence && imageSrc) {
+                    gameData.push({ name, sentence, image: imageSrc });
+                }
+            }
+
+            if (gameData.length === 0) {
+                return alert('請至少完成一組有「名字」、「句子」且「有圖片」的角色資訊喔！');
+            }
+
+            let tCount = parseInt(document.getElementById('team-count').value) || 1;
+            if (tCount > 26) tCount = 26;
+            
+            localStorage.setItem('matchGameSavedData', JSON.stringify(allSavedData));
+            localStorage.setItem('matchGameTeamCount', tCount);
+
+            teams = [];
+            for (let i = 0; i < tCount; i++) teams.push({ name: `Team ${alphabet[i]}`, score: 0 });
+            activeTeamIndex = 0; 
+
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            
+            buildGame();
+            renderScoreboard();
+        });
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('setup-screen').classList.remove('hidden');
+            window.scrollTo(0,0);
+        });
+
+        // ===== 計分板 (修改為自動跟隨最後加分組別) =====
+        function renderScoreboard() {
+            const sb = document.getElementById('scoreboard');
+            sb.innerHTML = '';
+            
+            teams.forEach((team, index) => {
+                const isActive = (index === activeTeamIndex);
+                const activeClasses = isActive 
+                    ? 'ring-4 ring-yellow-400 scale-110 bg-gradient-to-b from-yellow-50 to-white shadow-xl z-10 border-yellow-200' 
+                    : 'opacity-70 hover:opacity-100 bg-white border-gray-100 hover:shadow-md';
+
+                // 移除了外層的 onclick，組別框不再提供手動點擊切換
+                const html = `
+                    <div class="transition-all duration-300 px-5 py-3 rounded-2xl shadow-sm border-2 ${activeClasses} flex flex-col items-center min-w-[120px]">
+                        <div class="font-bold text-gray-500 text-sm tracking-wider uppercase">${team.name}</div>
+                        <div class="text-4xl font-black text-blue-700 my-2">${team.score}</div>
+                        <div class="flex gap-2 mt-1 w-full justify-center">
+                            <button onclick="changeScore(${index}, 1)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95">+1</button>
+                            <button onclick="changeScore(${index}, 5)" class="bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95">+5</button>
+                        </div>
+                    </div>
+                `;
+                sb.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // 當點擊加分按鈕時，分數增加，並自動將該組設為 activeTeamIndex
+        window.changeScore = function(index, delta) { 
+            teams[index].score += delta; 
+            activeTeamIndex = index; // 自動跟隨黃色框框
+            renderScoreboard(); 
+        };
+
+        let selectedPerson = null;
+        let matchesFound = 0;
+
+        function buildGame() {
+            const imgContainer = document.getElementById('game-images');
+            const senContainer = document.getElementById('game-sentences');
+            imgContainer.innerHTML = '';
+            senContainer.innerHTML = '';
+            matchesFound = 0;
+            selectedPerson = null;
+            document.getElementById('success-msg').classList.add('hidden');
+
+            const shuffledData = [...gameData].sort(() => Math.random() - 0.5);
+
+            gameData.forEach((data, index) => {
+                const isLastAndOdd = (index === gameData.length - 1 && gameData.length % 2 !== 0);
+                const colSpanClass = isLastAndOdd ? 'col-span-2' : '';
+                
+                const imgHtml = `
+                    <div data-name="${data.name}" class="item-card relative cursor-pointer transition-transform duration-300 hover:scale-110 group ${colSpanClass}">
+                        <div class="w-32 h-32 md:w-36 md:h-36 bg-white border-[6px] border-white outline outline-4 outline-blue-200 rounded-full flex items-center justify-center shadow-md overflow-hidden transition-all">
+                            <img src="${data.image}" alt="${data.name}" class="w-full h-full object-cover">
+                        </div>
+                        <div class="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full p-2.5 shadow-lg text-lg border-2 border-white">🔊</div>
+                    </div>
+                `;
+                imgContainer.insertAdjacentHTML('beforeend', imgHtml);
+            });
+
+            shuffledData.forEach((data) => {
+                const senHtml = `
+                    <button data-match="${data.name}" data-sentence="${data.sentence}" class="sentence-btn relative w-full py-5 px-6 bg-gradient-to-b from-yellow-300 to-yellow-400 text-blue-900 text-2xl font-black rounded-3xl border-b-[6px] border-yellow-600 shadow-lg transition-all duration-500 flex items-center justify-center hover:scale-[1.02]">
+                        <span class="absolute left-6 text-xl bg-white text-yellow-500 rounded-full p-2 shadow-sm pointer-events-none">🔊</span>
+                        <span class="btn-text ml-6 drop-shadow-sm">${data.sentence}</span>
+                    </button>
+                `;
+                senContainer.insertAdjacentHTML('beforeend', senHtml);
+            });
+
+            attachGameEvents();
+        }
+
+        function speakText(text) {
+            window.speechSynthesis.cancel(); 
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US'; utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function showBomb() {
+            const modal = document.getElementById('bomb-modal');
+            const box = document.getElementById('bomb-box');
+            modal.classList.remove('hidden');
+            
+            box.classList.remove('animate-bomb-large');
+            void box.offsetWidth; 
+            box.classList.add('animate-bomb-large');
+
+            setTimeout(() => { modal.classList.add('hidden'); }, 1000); 
+        }
+
+        function attachGameEvents() {
+            const personCards = document.querySelectorAll('.item-card');
+            const sentenceBtns = document.querySelectorAll('.sentence-btn');
+
+            personCards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const name = card.dataset.name;
+                    speakText(name);
+
+                    personCards.forEach(c => {
+                        c.children[0].classList.remove('outline-blue-600', 'ring-8', 'ring-blue-100', 'scale-105');
+                        c.children[0].classList.add('outline-blue-200');
+                    });
+                    card.children[0].classList.remove('outline-blue-200');
+                    card.children[0].classList.add('outline-blue-600', 'ring-8', 'ring-blue-100', 'scale-105');
+                    
+                    selectedPerson = name;
+                });
+            });
+
+            sentenceBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const sentenceText = btn.dataset.sentence;
+                    speakText(sentenceText);
+
+                    if (!selectedPerson) return; 
+
+                    if (btn.dataset.match === selectedPerson) {
+                        btn.classList.remove('from-yellow-300', 'to-yellow-400', 'border-yellow-600', 'text-blue-900', 'hover:scale-[1.02]');
+                        
+                        btn.classList.add('from-green-400', 'to-emerald-500', 'text-white', 'border-green-600', 'scale-[1.5]', '-translate-y-6', 'shadow-[0_20px_50px_rgba(34,197,94,0.5)]', 'z-[100]');
+                        btn.querySelector('.btn-text').innerHTML = `✨ ${sentenceText} ✨`; 
+
+                        setTimeout(() => {
+                            btn.classList.remove('from-green-400', 'to-emerald-500', 'text-white', 'border-green-600', 'scale-[1.5]', '-translate-y-6', 'shadow-[0_20px_50px_rgba(34,197,94,0.5)]', 'z-[100]');
+                            
+                            btn.classList.add('bg-gray-300', 'text-gray-500', 'border-gray-400', 'opacity-60', 'pointer-events-none', 'scale-100', 'translate-y-0');
+                            btn.querySelector('.btn-text').innerHTML = `✔️ ${sentenceText}`; 
+                            
+                            const personCard = document.querySelector(`.item-card[data-name="${selectedPerson}"]`);
+                            personCard.classList.add('opacity-40', 'pointer-events-none', 'grayscale');
+                            personCard.children[0].classList.remove('outline-blue-600', 'ring-8', 'ring-blue-100', 'scale-105');
+                            
+                            selectedPerson = null;
+                            matchesFound++;
+
+                            if (matchesFound === gameData.length) {
+                                setTimeout(() => {
+                                    document.getElementById('success-msg').classList.remove('hidden');
+                                    speakText("Excellent! You matched them all!");
+                                }, 500);
+                            }
+                        }, 1000); 
+
+                    } else {
+                        showBomb();
+                        btn.classList.add('animate-shake');
+                        setTimeout(() => { btn.classList.remove('animate-shake'); }, 400);
+                    }
+                });
+            });
+        }
+
+        initEditor();
+    </script>
+</body>
+</html>
